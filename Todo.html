@@ -265,6 +265,52 @@
   }
   .del-btn:hover { color: var(--danger); background: #FEE2E2; }
 
+  /* ── PRIORITY ── */
+  .priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+  .p-high   { background: #FEE2E2; color: #991B1B; }
+  .p-mid    { background: #FFF4DE; color: #92400E; }
+  .p-low    { background: #F1F5F9; color: #475569; }
+
+  .priority-stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .prio-btn {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    transition: background .12s, color .12s;
+    flex-shrink: 0;
+  }
+  .prio-btn:hover { background: var(--border); color: var(--text); }
+
+  .add-bar input[type="number"] {
+    width: 64px;
+    flex: none;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .add-bar input[type="number"]::-webkit-inner-spin-button,
+  .add-bar input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
   /* ── TOAST ── */
   #toast {
     position: fixed;
@@ -304,6 +350,7 @@
     <option value="prog">En progreso</option>
     <option value="done">Hecho</option>
   </select>
+  <input type="number" id="prio-input" min="1" max="10" value="5" title="Prioridad (1=baja · 10=alta)">
   <button class="btn-add" onclick="addTask()">+ Agregar</button>
 </div>
 
@@ -357,7 +404,9 @@
   function render() {
     COLS.forEach(col => {
       const body = document.getElementById('col-' + col);
-      const items = tasks.filter(t => t.col === col);
+      const items = tasks
+        .filter(t => t.col === col)
+        .sort((a, b) => col === 'done' ? 0 : (b.priority || 5) - (a.priority || 5));
       document.getElementById('count-' + col).textContent = items.length;
       body.innerHTML = '';
       if (!items.length) {
@@ -368,17 +417,42 @@
     });
   }
 
+  function prioClass(p) {
+    if (p >= 8) return 'p-high';
+    if (p >= 4) return 'p-mid';
+    return 'p-low';
+  }
+  function prioLabel(p) {
+    if (p >= 8) return '▲ ' + p;
+    if (p >= 4) return '● ' + p;
+    return '▼ ' + p;
+  }
+
   function buildCard(t) {
+    const p = t.priority || 5;
     const card = document.createElement('div');
     card.className = 'card';
     card.dataset.id = t.id;
 
+    // Top row: text + badge
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:flex-start;gap:8px;';
+
     const txt = document.createElement('div');
     txt.className = 'card-text';
+    txt.style.flex = '1';
     txt.textContent = t.text;
     txt.title = 'Haz doble clic para editar';
     txt.addEventListener('dblclick', () => startEdit(txt, t));
-    card.appendChild(txt);
+
+    const badge = document.createElement('span');
+    badge.className = 'priority-badge ' + prioClass(p);
+    badge.textContent = prioLabel(p);
+    badge.title = 'Prioridad ' + p + ' de 10';
+
+    topRow.appendChild(txt);
+    topRow.appendChild(badge);
+    card.appendChild(topRow);
 
     const footer = document.createElement('div');
     footer.className = 'card-footer';
@@ -397,6 +471,28 @@
       b.onclick = () => moveTask(t.id, NEXT[t.col]);
       footer.appendChild(b);
     }
+
+    // Priority stepper
+    const stepper = document.createElement('div');
+    stepper.className = 'priority-stepper';
+
+    const btnDown = document.createElement('button');
+    btnDown.className = 'prio-btn';
+    btnDown.textContent = '−';
+    btnDown.title = 'Bajar prioridad';
+    btnDown.disabled = p <= 1;
+    btnDown.onclick = () => changePriority(t.id, -1);
+
+    const btnUp = document.createElement('button');
+    btnUp.className = 'prio-btn';
+    btnUp.textContent = '+';
+    btnUp.title = 'Subir prioridad';
+    btnUp.disabled = p >= 10;
+    btnUp.onclick = () => changePriority(t.id, +1);
+
+    stepper.appendChild(btnDown);
+    stepper.appendChild(btnUp);
+    footer.appendChild(stepper);
 
     const del = document.createElement('button');
     del.className = 'del-btn';
@@ -445,13 +541,22 @@
     const input = document.getElementById('task-input');
     const col   = document.getElementById('col-select').value;
     const text  = input.value.trim();
+    const prio  = Math.min(10, Math.max(1, parseInt(document.getElementById('prio-input').value) || 5));
     if (!text) { input.focus(); return; }
-    tasks.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), text, col });
+    tasks.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), text, col, priority: prio });
     save(tasks);
     render();
     input.value = '';
     input.focus();
     toast('Tarea agregada');
+  }
+
+  function changePriority(id, delta) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    t.priority = Math.min(10, Math.max(1, (t.priority || 5) + delta));
+    save(tasks);
+    render();
   }
 
   function moveTask(id, newCol) {
